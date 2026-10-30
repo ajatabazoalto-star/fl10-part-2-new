@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight 10 — Dual Role (Pilot & TCP)</title>
+<style>
+  :root{
+    --navy:#0b1f3a;
+    --navy2:#122a4d;
+    --sky:#1ea7e8;
+    --amber:#f5a623;
+    --green:#28c76f;
+    --red:#ea5455;
+    --ink:#122036;
+    --paper:#f4f8fc;
+    --card:#ffffff;
+    --muted:#6b7c93;
+    --radius:16px;
+    --shadow:0 8px 24px rgba(11,31,58,0.12);
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);}
+  body{min-height:100vh;}
+
+  /* ROLE SELECTOR */
+  #roleSelector {
+    position:fixed; top:0; left:0; width:100%; height:100%; background:var(--navy); z-index:9999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; text-align:center; padding:20px;
+  }
+  #roleSelector h1 { font-size:clamp(24px, 5vw, 40px); margin-bottom:10px; }
+  #roleSelector p { color:#b9c8de; font-size:16px; margin-bottom:40px; }
+  .role-btns { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; }
+  .role-btn {
+    background:var(--card); border:3px solid var(--sky); border-radius:20px; padding:30px 40px;
+    cursor:pointer; transition:.2s; display:flex; flex-direction:column; align-items:center; gap:15px;
+    width:260px; color:var(--navy);
+  }
+  .role-btn:hover { transform:translateY(-5px); box-shadow:0 10px 30px rgba(30,167,232,0.4); }
+  .role-btn .icon { font-size:60px; }
+  .role-btn h2 { margin:0; font-size:22px; }
+  .role-btn p { margin:0; font-size:13px; color:var(--muted); }
+
+  /* APP CONTAINER */
+  #appContainer { display:none; }
+
+  header.topbar{background:linear-gradient(135deg,var(--navy) 0%, var(--navy2) 100%);color:#fff;padding:16px 18px 12px;position:sticky;top:0;z-index:50;box-shadow:0 4px 18px rgba(0,0,0,.25);}
+  .topbar-inner{max-width:1150px;margin:0 auto;}
+  .badge{display:inline-block;background:var(--sky);color:#fff;font-size:11px;font-weight:700;letter-spacing:1px;padding:5px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:8px;}
+  header.topbar h1{margin:0 0 4px;font-size:clamp(18px,3.6vw,26px);}
+  header.topbar p{margin:0 0 12px;color:#b9c8de;font-size:13px;}
+  .switch-role-btn { background:transparent; border:1px solid rgba(255,255,255,0.3); color:#fff; padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; margin-bottom:10px;}
+  .switch-role-btn:hover { background:rgba(255,255,255,0.1); }
+
+  nav.phasenav{display:flex;gap:6px;flex-wrap:wrap;}
+  nav.phasenav button{flex:1 1 100px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#dce6f5;padding:8px 6px;border-radius:10px;font-size:10.5px;font-weight:600;cursor:pointer;transition:.2s;text-align:center;}
+  nav.phasenav button .num{display:block;font-size:9px;font-weight:800;color:var(--amber);letter-spacing:1px;margin-bottom:2px;}
+  nav.phasenav button.active{background:var(--sky);border-color:var(--sky);color:#fff;}
+  nav.phasenav button:hover:not(.active){background:rgba(255,255,255,0.16);}
+  .progress-outer{height:6px;background:rgba(255,255,255,0.15);border-radius:6px;margin-top:10px;overflow:hidden;}
+  .progress-inner{height:100%;width:0%;background:linear-gradient(90deg,var(--sky),var(--amber));transition:width .4s ease;}
+  main{max-width:1150px;margin:0 auto;padding:26px 18px 70px;}
+  .phase{display:none;animation:fadeIn .4s ease;}
+  .phase.active{display:block;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  .phase-title{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .phase-title .bar{width:5px;height:26px;background:var(--sky);border-radius:3px;}
+  .phase-title h2{margin:0;font-size:clamp(19px,3.2vw,25px);}
+  .phase-sub{color:var(--muted);margin:0 0 22px;font-size:14.5px;max-width:760px;}
+  .word-dots{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;max-height:200px;overflow-y:auto;padding:4px;}
+  .word-dot{width:32px;height:32px;border-radius:50%;background:#e2ebf3;color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;cursor:pointer;border:2px solid transparent;flex-shrink:0;}
+  .word-dot.active{background:var(--sky);color:#fff;border-color:var(--sky);}
+  .word-dot.done{background:var(--green);color:#fff;}
+  .word-dot.failed{background:var(--red);color:#fff;}
+  .stepper-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;max-width:680px;margin:0 auto;border:1px solid #e2ebf3;}
+  .step-tags{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;justify-content:center;}
+  .step-tag{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.5px;background:#eef4fb;color:var(--muted);}
+  .step-tag.on{background:var(--sky);color:#fff;}
+  .stepper-image{width:260px;height:260px;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#eaf4fc,#dff0fb);border-radius:20px;margin-bottom:18px;overflow:hidden;box-shadow:0 4px 12px rgba(11,31,58,0.08);border:1px solid #e2ebf3;}
+  .stepper-image svg{width:100%;height:100%;}
+  .stepper-text{font-size:clamp(15px,2.7vw,22px);font-weight:800;color:var(--navy);margin-bottom:6px;min-height:36px;line-height:1.35;}
+  .stepper-hint{font-size:11.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px;}
+  .stepper-controls{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap;justify-content:center;}
+  .stepper-controls .speak-btn{width:48px;height:48px;font-size:20px;}
+  .nav-btn{background:var(--navy);color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;font-size:13px;transition:.15s;}
+  .nav-btn:hover{background:var(--sky);}
+  .nav-btn.ghost{background:#eef4fb;color:var(--navy);}
+  .nav-btn.ghost:hover{background:#dfeaf6;}
+  .nav-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .speak-btn{background:var(--sky);border:none;color:#fff;width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;flex-shrink:0;transition:.15s;}
+  .speak-btn:hover{background:var(--navy);}
+  .speak-btn.small{width:30px;height:30px;font-size:13px;}
+  .speak-btn.big{width:56px;height:56px;font-size:24px;}
+  .mic-btn{width:56px;height:56px;border-radius:50%;background:var(--red);color:#fff;border:none;font-size:24px;cursor:pointer;box-shadow:0 6px 18px rgba(234,84,85,.35);transition:.15s;}
+  .mic-btn:hover{transform:scale(1.06);}
+  .mic-btn.listening{animation:pulseMic 1s infinite;background:#c53030;}
+  .mic-btn.small{width:44px;height:44px;font-size:18px;box-shadow:0 4px 12px rgba(234,84,85,.3);}
+  @keyframes pulseMic{0%{box-shadow:0 0 0 0 rgba(234,84,85,.6);}70%{box-shadow:0 0 0 20px rgba(234,84,85,0);}100%{box-shadow:0 0 0 0 rgba(234,84,85,0);}}
+  .sp-transcript{min-height:24px;font-size:13px;color:var(--muted);font-style:italic;margin:8px 0;}
+  .sp-feedback{font-weight:800;font-size:14px;min-height:22px;}
+  .sp-feedback.ok{color:var(--green);}
+  .sp-feedback.bad{color:var(--red);}
+  .listen-click-panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 24px;text-align:center;max-width:1000px;margin:0 auto;border:1px solid #e2ebf3;}
+  .lc-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;}
+  .lc-round{font-size:13px;font-weight:800;color:var(--muted);letter-spacing:.5px;}
+  .lc-score-box{display:flex;gap:16px;align-items:center;background:#eef4fb;padding:8px 18px;border-radius:20px;}
+  .lc-score-box span{font-weight:800;}
+  .lc-score-box .good{color:var(--green);}
+  .lc-score-box .bad{color:var(--red);}
+  .lc-big-speak{width:90px;height:90px;border-radius:50%;background:var(--navy);color:#fff;border:none;font-size:38px;cursor:pointer;box-shadow:0 8px 22px rgba(11,31,58,.35);transition:.15s;margin:10px 0 12px;}
+  .lc-big-speak:hover{transform:scale(1.08);background:var(--sky);}
+  .lc-big-speak.pulsing{animation:pulse 1s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(30,167,232,.5);}70%{box-shadow:0 0 0 18px rgba(30,167,232,0);}100%{box-shadow:0 0 0 0 rgba(30,167,232,0);}}
+  .lc-instruction{font-size:15px;color:var(--navy);font-weight:700;margin-bottom:8px;}
+  .lc-subinstruction{font-size:13px;color:var(--muted);font-weight:600;margin-bottom:22px;}
+  .lc-images{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:12px;}
+  .lc-img-card{background:#f7fafd;border:3px solid #e2ebf3;border-radius:16px;padding:6px 6px 38px 6px;cursor:pointer;transition:.15s;aspect-ratio:1.1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;}
+  .lc-img-card svg{width:100%;height:100%;max-height:140px;}
+  .lc-img-card:hover{border-color:var(--sky);transform:scale(1.03);}
+  .lc-img-card.correct{border-color:var(--green);background:#e8f9ee;animation:pop .4s ease;box-shadow:0 0 0 4px rgba(40,199,111,.25);}
+  .lc-img-card.wrong{border-color:var(--red);background:#fdecec;animation:shake .4s ease;}
+  @keyframes pop{0%{transform:scale(1);}50%{transform:scale(1.08);}100%{transform:scale(1);}}
+  @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-8px);}75%{transform:translateX(8px);}}
+  .lc-img-label{position:absolute;bottom:0;left:0;right:0;background:var(--navy);color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.3px;padding:6px 6px;text-align:center;border-bottom-left-radius:13px;border-bottom-right-radius:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lc-img-card.correct .lc-img-label{background:var(--green);}
+  .lc-img-card.wrong .lc-img-label{background:var(--red);}
+  .lc-feedback{margin-top:20px;font-weight:800;font-size:15px;min-height:26px;}
+  .lc-feedback.ok{color:var(--green);}
+  .lc-feedback.bad{color:var(--red);}
+  .lc-complete{text-align:center;padding:30px 20px;}
+  .lc-complete h3{font-size:24px;margin:0 0 10px;}
+  .lc-complete .score-big{font-size:52px;font-weight:900;color:var(--sky);margin:10px 0;}
+  .lc-complete .score-sub{color:var(--muted);font-size:14px;margin-bottom:20px;}
+  .lc-complete.pass h3{color:var(--green);}
+  .lc-complete.fail h3{color:var(--red);}
+  .fb-progress{height:10px;background:#e2ebf3;border-radius:8px;overflow:hidden;margin-bottom:22px;}
+  .fb-progress-inner{height:100%;width:0%;background:linear-gradient(90deg,var(--sky),var(--green));transition:.4s;}
+  .fb-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px;max-width:780px;margin:0 auto;border:1px solid #e2ebf3;}
+  .fb-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:6px;}
+  .fb-num{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.5px;}
+  .fb-score{font-size:13px;font-weight:800;color:var(--green);}
+  .fb-sentence{font-size:16px;font-weight:700;color:var(--ink);line-height:1.5;margin-bottom:18px;}
+  .fb-sentence .gap{display:inline-block;min-width:100px;border-bottom:3px solid var(--amber);text-align:center;color:var(--amber);}
+  .fb-sentence .tense-tag{display:inline-block;font-size:10px;font-weight:800;color:var(--sky);background:#eef4fb;padding:2px 8px;border-radius:8px;margin-left:6px;text-transform:uppercase;letter-spacing:.5px;vertical-align:middle;}
+  .fb-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
+  .fb-choice{background:#f7fafd;border:2px solid #e2ebf3;border-radius:12px;padding:12px;font-weight:700;font-size:13px;cursor:pointer;text-align:center;transition:.15s;}
+  .fb-choice:hover{border-color:var(--sky);}
+  .fb-choice.correct{background:#e8f9ee;border-color:var(--green);color:#1c8a4d;animation:pop .3s ease;}
+  .fb-choice.wrong{background:#fdecec;border-color:var(--red);color:#c53030;animation:shake .3s ease;}
+  .fb-feedback{margin-top:16px;font-weight:700;font-size:14px;min-height:20px;}
+  .fb-feedback.ok{color:var(--green);}
+  .fb-feedback.bad{color:var(--red);}
+  .match-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;}
+  .match-item{background:#f7fafd;border:2px solid #e2ebf3;border-radius:12px;padding:14px 12px;cursor:pointer;transition:.15s;font-weight:600;font-size:13px;text-align:center;min-height:50px;display:flex;align-items:center;justify-content:center;line-height:1.35;}
+  .match-item:hover{border-color:var(--sky);}
+  .match-item.selected{background:var(--sky);color:#fff;border-color:var(--sky);}
+  .match-item.matched{background:#e8f9ee;border-color:var(--green);color:#1c8a4d;cursor:default;}
+  .match-item.wrong-match{background:#fdecec;border-color:var(--red);color:#c53030;animation:shake .3s ease;}
+  .match-item .m-icon{font-size:16px;margin-right:6px;flex-shrink:0;}
+  .match-item.def-item{font-size:12px;font-weight:500;text-align:left;justify-content:flex-start;}
+  .match-pair-status{font-weight:700;font-size:14px;min-height:24px;margin-top:12px;}
+  .listen-panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 22px;text-align:center;max-width:820px;margin:0 auto;border:1px solid #e2ebf3;}
+  .listen-count{color:var(--muted);font-size:13px;margin-bottom:6px;font-weight:600;}
+  .context-card{background:#eef4fb;border-left:4px solid var(--sky);border-radius:8px;padding:12px 16px;margin-bottom:18px;text-align:left;font-size:13px;color:var(--navy);font-weight:600;}
+  .context-card strong{color:var(--navy2);display:block;margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+  .big-speak{width:90px;height:90px;border-radius:50%;background:var(--navy);color:#fff;border:none;font-size:36px;cursor:pointer;box-shadow:0 6px 18px rgba(11,31,58,.35);transition:.15s;margin:6px 0 18px;}
+  .big-speak:hover{transform:scale(1.06);background:var(--sky);}
+  .big-speak.pulsing{animation:pulse 1s infinite;}
+  .listen-question{background:#eef4fb;border-radius:12px;padding:16px 20px;margin:0 auto 18px;max-width:640px;font-size:16px;font-weight:800;color:var(--navy);text-align:center;line-height:1.4;}
+  .listen-question .q-tag{display:block;font-size:10.5px;color:var(--sky);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:800;}
+  .listen-options{display:grid;grid-template-columns:1fr;gap:10px;margin-top:6px;}
+  .listen-opt{background:#f7fafd;border:2px solid #e2ebf3;border-radius:14px;padding:14px 18px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:12px;font-weight:600;font-size:14px;text-align:left;line-height:1.4;}
+  .listen-opt:hover{border-color:var(--sky);background:#eef7fd;}
+  .listen-opt .lo-letter{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;background:var(--navy);color:#fff;border-radius:50%;font-weight:800;font-size:13px;flex-shrink:0;}
+  .listen-opt.correct{background:#e8f9ee;border-color:var(--green);animation:pop .3s ease;}
+  .listen-opt.correct .lo-letter{background:var(--green);}
+  .listen-opt.wrong{background:#fdecec;border-color:var(--red);animation:shake .3s ease;}
+  .listen-opt.wrong .lo-letter{background:var(--red);}
+  .listen-footer{margin-top:22px;display:flex;justify-content:center;gap:14px;flex-wrap:wrap;}
+  .score-pill{display:inline-flex;gap:10px;align-items:center;background:#eef4fb;padding:8px 18px;border-radius:20px;font-weight:700;font-size:13px;color:var(--navy);}
+  .sp-wrap{max-width:780px;margin:0 auto;}
+  .sp-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;text-align:center;border:1px solid #e2ebf3;}
+  .sp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
+  .sp-num{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.5px;}
+  .sp-score{font-size:13px;font-weight:800;color:var(--green);}
+  .sp-target{font-size:clamp(15px,2.5vw,20px);font-weight:800;color:var(--navy);margin:14px 0 6px;line-height:1.5;}
+  .sp-hint{color:var(--muted);font-size:13px;margin-bottom:16px;}
+  .sp-controls{display:flex;justify-content:center;gap:14px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+  .sp-next{margin-top:16px;background:var(--navy);color:#fff;border:none;padding:11px 22px;border-radius:10px;font-weight:700;cursor:pointer;display:none;}
+  .sp-next.show{display:inline-block;}
+  .sp-unsupported{background:#fff6e6;color:#8a6300;border-radius:12px;padding:14px;font-size:13px;font-weight:600;margin-top:10px;}
+  .read-panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:30px 26px;max-width:820px;margin:0 auto;border:1px solid #e2ebf3;}
+  .read-passage{background:#eef4fb;border-left:5px solid var(--sky);border-radius:10px;padding:20px 22px;margin-bottom:24px;font-size:15px;line-height:1.65;color:var(--ink);}
+  .read-q{margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid #e2ebf3;}
+  .read-q:last-of-type{border-bottom:none;}
+  .read-q-text{font-weight:800;font-size:15px;color:var(--navy);margin-bottom:12px;line-height:1.4;}
+  .read-opts{display:grid;gap:8px;}
+  .read-opt{background:#f7fafd;border:2px solid #e2ebf3;border-radius:10px;padding:11px 14px;cursor:pointer;font-size:13.5px;font-weight:600;transition:.15s;}
+  .read-opt:hover{border-color:var(--sky);background:#eef7fd;}
+  .read-opt.correct{background:#e8f9ee;border-color:var(--green);color:#1c8a4d;}
+  .read-opt.wrong{background:#fdecec;border-color:var(--red);color:#c53030;animation:shake .3s ease;}
+  .read-opt.disabled{pointer-events:none;opacity:0.85;}
+  .read-score-bar{background:#eef4fb;padding:12px 18px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:14px;color:var(--navy);margin-bottom:20px;flex-wrap:wrap;gap:8px;}
+  .read-score-bar .good{color:var(--green);}
+  .read-score-bar .bad{color:var(--red);}
+  .final-wrap{max-width:750px;margin:0 auto;text-align:center;}
+  .final-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:36px 24px;border:1px solid #e2ebf3;}
+  .final-card h3{font-size:24px;color:var(--navy);margin:0 0 4px;}
+  .final-score-big{font-size:64px;font-weight:900;color:var(--sky);margin-bottom:4px;}
+  .final-score-sub{color:var(--muted);font-size:13px;margin-bottom:20px;}
+  .final-breakdown{display:flex;flex-direction:column;gap:12px;text-align:left;margin-bottom:20px;}
+  .fb-row{display:flex;align-items:center;gap:12px;}
+  .fb-row .fb-label{width:150px;font-size:13px;font-weight:700;color:var(--ink);flex-shrink:0;}
+  .fb-row .fb-bar-outer{flex:1;height:10px;background:#e2ebf3;border-radius:6px;overflow:hidden;}
+  .fb-row .fb-bar-inner{height:100%;background:linear-gradient(90deg,var(--sky),var(--green));border-radius:6px;}
+  .fb-row .fb-val{width:52px;text-align:right;font-size:12.5px;font-weight:800;color:var(--muted);}
+  .final-message{background:#eef4fb;border-left:5px solid var(--sky);border-radius:10px;padding:16px;margin:20px 0;text-align:left;font-size:14px;color:var(--navy);font-weight:600;}
+  .final-message.pass{background:#e8f9ee;border-color:var(--green);}
+  .final-message.fail{background:#fdecec;border-color:var(--red);}
+  .failed-words{background:#fdecec;border-radius:12px;padding:18px;margin:16px 0;text-align:left;}
+  .failed-words h4{color:var(--red);margin:0 0 8px;font-size:16px;}
+  .failed-words .fw-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f5d6d6;font-size:14px;flex-wrap:wrap;gap:6px;}
+  .failed-words .fw-item:last-child{border-bottom:none;}
+  .fw-item .fw-word{font-weight:700;color:var(--navy);}
+  .fw-item .fw-context{color:var(--muted);font-size:13px;flex:1;text-align:left;padding:0 10px;}
+  .restart-btn{background:var(--amber);border:none;color:#3a2600;padding:13px 28px;border-radius:10px;font-weight:800;cursor:pointer;font-size:14.5px;margin-top:10px;}
+  .restart-btn.secondary{background:var(--navy);color:#fff;margin-left:10px;}
+  footer.bottom{text-align:center;color:var(--muted);font-size:12px;padding:20px;}
+  footer.bottom span{color:var(--sky);font-weight:700;}
+  @media(max-width:700px){
+    .lc-images{grid-template-columns:1fr;}
+    .match-grid{grid-template-columns:1fr;}
+    nav.phasenav{gap:5px;}
+    nav.phasenav button{font-size:9.5px;padding:7px 4px;}
+    .fb-choices{grid-template-columns:1fr 1fr;}
+    .listen-options{grid-template-columns:1fr;}
+    .final-breakdown .fb-row{flex-wrap:wrap;}
+    .fb-row .fb-label{width:100%;}
+    .failed-words .fw-item{flex-direction:column;align-items:flex-start;}
+    .fw-item .fw-context{padding:0;}
+    .word-dots{max-height:150px;}
+    .stepper-image{width:200px;height:200px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ROLE SELECTOR -->
+<div id="roleSelector">
+  <h1>✈️ Flight 10 — Unit 10</h1>
+  <p>Select your role to load the specific vocabulary and exercises.</p>
+  <div class="role-btns">
+    <button class="role-btn" onclick="loadRole('pilot')">
+      <span class="icon">🧑‍✈️</span>
+      <h2>PILOT</h2>
+      <p>Zulu Time, METAR, ATC &amp; Modals</p>
+    </button>
+    <button class="role-btn" onclick="loadRole('tcp')">
+      <span class="icon">💁‍♀️</span>
+      <h2>CABIN CREW (TCP)</h2>
+      <p>Duty-Free, Payments &amp; Passenger Service</p>
+    </button>
+  </div>
+</div>
+
+<!-- APP CONTAINER -->
+<div id="appContainer">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button class="switch-role-btn" onclick="switchRole()">← Cambiar Rol</button>
+      <br>
+      <span class="badge" id="headerBadge">Flight 10 · Pilot Version</span>
+      <h1 id="headerTitle">Flight 10 — Zulu Time &amp; Weather</h1>
+      <p id="headerSub">METAR, ATC Communications &amp; Modals · Minimum 80% to pass</p>
+      <nav class="phasenav" id="phaseNav">
+        <button class="phase-btn active" data-phase="1"><span class="num">SECTION 1</span>Core Words</button>
+        <button class="phase-btn" data-phase="2"><span class="num">SECTION 2</span>Match</button>
+        <button class="phase-btn" data-phase="3"><span class="num">SECTION 3</span>Listen &amp; Click</button>
+        <button class="phase-btn" data-phase="4"><span class="num">SECTION 4</span>Listen &amp; Answer</button>
+        <button class="phase-btn" data-phase="5"><span class="num">SECTION 5</span>Fill Blank</button>
+        <button class="phase-btn" data-phase="6"><span class="num">SECTION 6</span>Speak</button>
+        <button class="phase-btn" data-phase="7"><span class="num">SECTION 7</span>Reading</button>
+        <button class="phase-btn" data-phase="8"><span class="num">SECTION 8</span>Final Note</button>
+      </nav>
+      <div class="progress-outer"><div class="progress-inner" id="topProgress"></div></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="phase active" id="phase1">
+      <div class="phase-title"><span class="bar"></span><h2>Core Words</h2></div>
+      <p class="phase-sub" id="sub1">20 palabras clave.</p>
+      <div class="word-dots" id="wordDots"></div>
+      <div class="stepper-card">
+        <div class="step-tags">
+          <div class="step-tag" id="tag1">1 · Word</div>
+          <div class="step-tag" id="tag2">2 · Structure</div>
+          <div class="step-tag" id="tag3">3 · Sentence</div>
+        </div>
+        <div class="stepper-image" id="stepImage"></div>
+        <div class="stepper-hint" id="stepHint">STEP 1 — LEARN THE WORD</div>
+        <div class="stepper-text" id="stepText"></div>
+        <div class="stepper-controls">
+          <button class="nav-btn ghost" id="prevStepBtn">← Back</button>
+          <button class="speak-btn" id="stepSpeakBtn">🔊</button>
+          <button class="mic-btn small" id="stepMicBtn">🎙️</button>
+          <button class="nav-btn" id="nextStepBtn">Next →</button>
+        </div>
+        <div class="sp-transcript" id="stepTranscript">&nbsp;</div>
+        <div class="sp-feedback" id="stepFeedback">&nbsp;</div>
+        <div style="margin-top:14px;font-size:13px;font-weight:600;color:var(--muted);">
+          ✅ Aciertos: <span id="wordCorrect">0</span> &nbsp;|&nbsp; ❌ Fallos: <span id="wordWrong">0</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="phase" id="phase2">
+      <div class="phase-title"><span class="bar"></span><h2>Match the Pair</h2></div>
+      <p class="phase-sub">Match each aviation term with its English definition.</p>
+      <div class="fb-progress"><div class="fb-progress-inner" id="matchProgress"></div></div>
+      <div id="matchArea"></div>
+    </section>
+
+    <section class="phase" id="phase3">
+      <div class="phase-title"><span class="bar"></span><h2>Listen &amp; Click</h2></div>
+      <p class="phase-sub">Listen and click the correct image.</p>
+      <div class="listen-click-panel" id="listenClickPanel"></div>
+    </section>
+
+    <section class="phase" id="phase4">
+      <div class="phase-title"><span class="bar"></span><h2>Listen &amp; Answer</h2></div>
+      <p class="phase-sub">Listen and choose the correct answer.</p>
+      <div class="listen-panel">
+        <div class="listen-count" id="listenCount">Round 1 of 10</div>
+        <div class="context-card" id="listenContext"></div>
+        <button class="big-speak pulsing" id="bigSpeakBtn">🔊</button>
+        <div class="listen-question" id="listenQuestion"></div>
+        <div class="listen-options" id="listenOptions"></div>
+        <div class="listen-footer">
+          <div class="score-pill">✅ Aciertos: <span id="listenCorrect">0</span> &nbsp;|&nbsp; ❌ Fallos: <span id="listenWrong">0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="phase" id="phase5">
+      <div class="phase-title"><span class="bar"></span><h2>Fill the Blank</h2></div>
+      <p class="phase-sub">Complete each sentence.</p>
+      <div class="fb-wrap">
+        <div class="fb-progress"><div class="fb-progress-inner" id="fbProgress"></div></div>
+        <div id="fbArea"></div>
+      </div>
+    </section>
+
+    <section class="phase" id="phase6">
+      <div class="phase-title"><span class="bar"></span><h2>Speech Practice</h2></div>
+      <p class="phase-sub">Practice pronunciation.</p>
+      <div class="sp-wrap" id="spArea"></div>
+    </section>
+
+    <section class="phase" id="phase7">
+      <div class="phase-title"><span class="bar"></span><h2>Reading Comprehension</h2></div>
+      <p class="phase-sub">Read and answer the questions.</p>
+      <div class="read-panel" id="readPanel"></div>
+    </section>
+
+    <section class="phase" id="phase8">
+      <div class="phase-title"><span class="bar"></span><h2>Final Note</h2></div>
+      <p class="phase-sub">Your final score.</p>
+      <div class="final-wrap" id="finalArea"></div>
+    </section>
+  </main>
+
+  <footer class="bottom" id="footerText">✈️ Flight 10 · <span>Pilot Version</span></footer>
+</div>
+
+<script>
+// ============================================================
+// SVG ICONS (Shared + Specific)
+// ============================================================
+const ICONS = {
+  // Pilot
+  zulu: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyZ" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyZ)"/><circle cx="100" cy="100" r="75" fill="#1a1a1a" stroke="#7a7566" stroke-width="3"/><circle cx="100" cy="100" r="65" fill="#fdfcf8"/><g font-family="monospace" font-size="14" font-weight="bold" fill="#2b2b2b" text-anchor="middle"><text x="100" y="50">00</text><text x="140" y="70">03</text><text x="155" y="105">06</text><text x="140" y="140">09</text><text x="100" y="160">12</text><text x="60" y="140">15</text><text x="45" y="105">18</text><text x="60" y="70">21</text></g><g><animateTransform attributeName="transform" type="rotate" from="0 100 100" to="360 100 100" dur="10s" repeatCount="indefinite"/><line x1="100" y1="100" x2="100" y2="60" stroke="#ea5455" stroke-width="3" stroke-linecap="round"/></g><line x1="100" y1="100" x2="130" y2="100" stroke="#1ea7e8" stroke-width="3" stroke-linecap="round"/><circle cx="100" cy="100" r="5" fill="#f5a623"/></svg>`,
+  metar: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyM" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyM)"/><rect x="30" y="60" width="140" height="80" rx="6" fill="#0b1f3a" stroke="#1a1a1a" stroke-width="3"/><text x="100" y="95" text-anchor="middle" font-size="14" fill="#28c76f" font-family="monospace" font-weight="bold">METAR</text><text x="100" y="120" text-anchor="middle" font-size="10" fill="#fff" font-family="monospace">EGLL 121250Z</text></svg>`,
+  // TCP
+  dutyfree: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyD" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyD)"/><rect x="50" y="60" width="100" height="80" rx="4" fill="#f5a623" stroke="#0b1f3a" stroke-width="3"/><text x="100" y="95" text-anchor="middle" font-size="14" fill="#0b1f3a" font-weight="bold">DUTY</text><text x="100" y="115" text-anchor="middle" font-size="14" fill="#0b1f3a" font-weight="bold">FREE</text><path d="M 40 140 L 160 140" stroke="#1ea7e8" stroke-width="4"/></svg>`,
+  creditcard: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyC" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyC)"/><rect x="30" y="70" width="140" height="60" rx="6" fill="#1ea7e8" stroke="#0b1f3a" stroke-width="3"/><rect x="30" y="80" width="140" height="15" fill="#0b1f3a"/><rect x="45" y="105" width="30" height="15" fill="#f5a623"/></svg>`,
+  cash: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyCa" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyCa)"/><rect x="50" y="60" width="100" height="50" rx="4" fill="#28c76f" stroke="#0b1f3a" stroke-width="3"/><text x="100" y="92" text-anchor="middle" font-size="24" fill="#fff" font-weight="bold">$</text><rect x="60" y="120" width="80" height="20" fill="#1ea7e8" stroke="#0b1f3a" stroke-width="2"/></svg>`,
+  // Shared
+  weather: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyW" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyW)"/><path d="M 60 100 Q 60 70 90 70 Q 110 50 140 70 Q 160 70 160 100 Z" fill="#6b7c93" stroke="#0b1f3a" stroke-width="3"/><path d="M 70 120 L 70 160 M 100 120 L 100 160 M 130 120 L 130 160" stroke="#1ea7e8" stroke-width="6" stroke-linecap="round"/></svg>`,
+  time: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyT" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyT)"/><circle cx="100" cy="100" r="60" fill="#fdfcf8" stroke="#0b1f3a" stroke-width="4"/><line x1="100" y1="100" x2="100" y2="60" stroke="#ea5455" stroke-width="4"/><line x1="100" y1="100" x2="125" y2="115" stroke="#0b1f3a" stroke-width="4"/></svg>`,
+  plane: `<svg viewBox="0 0 200 200"><defs><linearGradient id="skyP" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#eaf4fc"/><stop offset="100%" stop-color="#dff0fb"/></linearGradient></defs><rect width="200" height="200" fill="url(#skyP)"/><path d="M 30 100 L 170 80 L 130 100 L 170 120 L 30 100 Z" fill="#1ea7e8" stroke="#0b1f3a" stroke-width="3"/></svg>`
+};
+
+// ============================================================
+// DATA
+// ============================================================
+const PILOT_DATA = {
+  title: "Flight 10 — Zulu Time & Weather",
+  sub: "METAR, ATC Communications & Modals",
+  badge: "Flight 10 · Pilot Version",
+  footer: "Pilot Version",
+  words: [
+    { word:'Zulu Time', svgKey:'zulu', structure:'Zulu Time (UTC)', sentence:'Pilots must synchronize their watches to Zulu Time.' },
+    { word:'METAR', svgKey:'metar', structure:'The METAR report', sentence:'The METAR shows the current weather conditions.' },
+    { word:'Visibility', svgKey:'weather', structure:'The visibility', sentence:'Low visibility can delay the flight.' },
+    { word:'Ceiling', svgKey:'weather', structure:'The ceiling', sentence:'The ceiling is the height of the lowest cloud layer.' },
+    { word:'Wind Shear', svgKey:'weather', structure:'Wind shear', sentence:'Wind shear is dangerous during takeoff and landing.' },
+    { word:'Crosswind', svgKey:'weather', structure:'A crosswind', sentence:'The pilot must adjust for the crosswind.' },
+    { word:'Turbulence', svgKey:'weather', structure:'Turbulence', sentence:'We encountered severe turbulence at 30,000 feet.' },
+    { word:'ATIS', svgKey:'metar', structure:'The ATIS', sentence:'Listen to the ATIS for weather information.' },
+    { word:'ETA', svgKey:'time', structure:'The ETA', sentence:'Please confirm your ETA.' },
+    { word:'ETD', svgKey:'time', structure:'The ETD', sentence:'The ETD is 1430 Zulu.' },
+    { word:'Slot', svgKey:'time', structure:'The slot', sentence:'We have a departure slot at 1500.' },
+    { word:'Delay', svgKey:'time', structure:'A delay', sentence:'There is a weather delay.' },
+    { word:'Request', svgKey:'plane', structure:'To request', sentence:'We can request a higher altitude.' },
+    { word:'Confirm', svgKey:'plane', structure:'To confirm', sentence:'Could you confirm the runway?' },
+    { word:'Readback', svgKey:'plane', structure:'To readback', sentence:'Pilots must readback the clearance.' },
+    { word:'Synchronize', svgKey:'time', structure:'To synchronize', sentence:'Synchronize the chronometers.' },
+    { word:'Adjust', svgKey:'plane', structure:'To adjust', sentence:'Adjust the heading to avoid weather.' },
+    { word:'Depart', svgKey:'plane', structure:'To depart', sentence:'We will depart in 10 minutes.' },
+    { word:'Arrive', svgKey:'plane', structure:'To arrive', sentence:'The aircraft will arrive at 1600.' },
+    { word:'Postpone', svgKey:'time', structure:'To postpone', sentence:'We must postpone the flight.' }
+  ],
+  match: [
+    { word:'Zulu Time', definition:'Standard time reference in aviation (UTC)' },
+    { word:'METAR', definition:'Aviation routine weather report' },
+    { word:'Visibility', definition:'Distance one can see clearly' },
+    { word:'Ceiling', definition:'Height of the lowest cloud layer' },
+    { word:'Wind Shear', definition:'Sudden change in wind speed or direction' },
+    { word:'Crosswind', definition:'Wind blowing across the runway' },
+    { word:'Turbulence', definition:'Irregular air movement' },
+    { word:'ATIS', definition:'Automated Terminal Information Service' },
+    { word:'ETA', definition:'Estimated time of arrival' },
+    { word:'ETD', definition:'Estimated time of departure' },
+    { word:'Slot', definition:'Assigned time for takeoff or landing' },
+    { word:'Delay', definition:'A late departure or arrival' },
+    { word:'Request', definition:'To ask for something' },
+    { word:'Confirm', definition:'To verify information' },
+    { word:'Readback', definition:'To repeat an ATC instruction' },
+    { word:'Synchronize', definition:'To set clocks to the same time' },
+    { word:'Adjust', definition:'To change heading or speed' },
+    { word:'Depart', definition:'To take off' },
+    { word:'Arrive', definition:'To land or reach destination' },
+    { word:'Postpone', definition:'To delay to a later time' }
+  ],
+  lc: [
+    { type:'conversation', context:'ATC — Modals', audio:'Pilot: Could we request a higher altitude? ATC: Yes, you can climb to flight level 350.', question:'What is the pilot requesting?', options:[{text:'A higher altitude',svgKey:'plane'},{text:'A lower altitude',svgKey:'plane'},{text:'A different runway',svgKey:'plane'},{text:'A weather report',svgKey:'weather'}], answerIndex:0 },
+    { type:'description', context:'Weather — METAR', audio:'This report provides current weather information, including visibility, ceiling, and wind.', question:'What is being described?', options:[{text:'A METAR',svgKey:'metar'},{text:'An ATIS',svgKey:'metar'},{text:'A TAF',svgKey:'metar'},{text:'A NOTAM',svgKey:'metar'}], answerIndex:0 },
+    { type:'conversation', context:'ATC — Time', audio:'ATC: Can you confirm your ETA? Pilot: We are going to arrive at one five three zero Zulu.', question:'What time is the ETA?', options:[{text:'15:30 Zulu',svgKey:'time'},{text:'13:30 Zulu',svgKey:'time'},{text:'14:30 Zulu',svgKey:'time'},{text:'16:30 Zulu',svgKey:'time'}], answerIndex:0 },
+    { type:'description', context:'Weather — Hazard', audio:'This condition occurs when wind changes direction or speed rapidly, which is dangerous during landing.', question:'What hazard is being described?', options:[{text:'Wind Shear',svgKey:'weather'},{text:'Turbulence',svgKey:'weather'},{text:'Fog',svgKey:'weather'},{text:'Icing',svgKey:'weather'}], answerIndex:0 },
+    { type:'conversation', context:'ATC — Readback', audio:'ATC: Cleared to land runway 27. Pilot: Cleared to land runway 27.', question:'What did the pilot do?', options:[{text:'Readback',svgKey:'plane'},{text:'Request',svgKey:'plane'},{text:'Confirm',svgKey:'plane'},{text:'Postpone',svgKey:'plane'}], answerIndex:0 },
+    { type:'description', context:'Time — Delay', audio:'Due to bad weather, the flight cannot depart on time. This is called a...', question:'What is the situation called?', options:[{text:'Delay',svgKey:'time'},{text:'Slot',svgKey:'time'},{text:'ETA',svgKey:'time'},{text:'ETD',svgKey:'time'}], answerIndex:0 },
+    { type:'conversation', context:'ATC — Obligation', audio:'The pilot must readback the instruction before starting the approach.', question:'What must the pilot do?', options:[{text:'Readback the instruction',svgKey:'plane'},{text:'Request a delay',svgKey:'time'},{text:'Synchronize the clock',svgKey:'time'},{text:'Postpone the flight',svgKey:'time'}], answerIndex:0 },
+    { type:'description', context:'Weather — Ceiling', audio:'This measures the height of the lowest broken or overcast cloud layer.', question:'What is being described?', options:[{text:'Ceiling',svgKey:'weather'},{text:'Visibility',svgKey:'weather'},{text:'Crosswind',svgKey:'weather'},{text:'Turbulence',svgKey:'weather'}], answerIndex:0 },
+    { type:'conversation', context:'ATC — Ability', audio:'Pilot: Can we land on runway 09? ATC: Yes, you can land on runway 09.', question:'What does the pilot want to do?', options:[{text:'Land on runway 09',svgKey:'plane'},{text:'Take off from runway 09',svgKey:'plane'},{text:'Taxi to the gate',svgKey:'plane'},{text:'Request a delay',svgKey:'time'}], answerIndex:0 },
+    { type:'description', context:'Weather — ATIS', audio:'This is an automated broadcast containing essential weather and airport information.', question:'What is being described?', options:[{text:'ATIS',svgKey:'metar'},{text:'METAR',svgKey:'metar'},{text:'TAF',svgKey:'metar'},{text:'NOTAM',svgKey:'metar'}], answerIndex:0 }
+  ],
+  la: [
+    { context:'WEATHER — MUST', audio:'The pilot must check the METAR before departure.', question:'What must the pilot check?', options:['The METAR', 'The ETA', 'The slot', 'The ATIS'], answerIndex:0 },
+    { context:'COMMUNICATION — CAN', audio:'We can request a higher altitude.', question:'What can they request?', options:['A higher altitude', 'A lower speed', 'A different runway', 'A delay'], answerIndex:0 },
+    { context:'WEATHER — COULD', audio:'Could we avoid the turbulence by climbing?', question:'What do they want to avoid?', options:['Turbulence', 'The METAR', 'The ceiling', 'The crosswind'], answerIndex:0 },
+    { context:'TIME — ETA', audio:'We are going to arrive at one five four zero Zulu.', question:'What is the ETA?', options:['15:40 Zulu', '14:40 Zulu', '16:40 Zulu', '13:40 Zulu'], answerIndex:0 },
+    { context:'COMMUNICATION — READBACK', audio:'Pilots must readback the clearance.', question:'What must pilots do?', options:['Readback the clearance', 'Request a delay', 'Confirm the ceiling', 'Synchronize the clock'], answerIndex:0 },
+    { context:'WEATHER — WIND', audio:'The crosswind is 20 knots, so the pilot must adjust the approach.', question:'What must the pilot adjust?', options:['The approach', 'The ETA', 'The slot', 'The ATIS'], answerIndex:0 },
+    { context:'TIME — DELAY', audio:'The flight is delayed due to low visibility.', question:'Why is the flight delayed?', options:['Low visibility', 'High winds', 'Turbulence', 'Icing'], answerIndex:0 },
+    { context:'COMMUNICATION — CANNOT', audio:'The pilot could not land due to wind shear.', question:'Why could the pilot not land?', options:['Wind shear', 'Turbulence', 'Fog', 'Icing'], answerIndex:0 },
+    { context:'TIME — ETD', audio:'The ETD is zero nine three zero Zulu.', question:'What is the ETD?', options:['09:30 Zulu', '08:30 Zulu', '10:30 Zulu', '07:30 Zulu'], answerIndex:0 },
+    { context:'COMMUNICATION — MUST', audio:'Pilots must synchronize their chronometers.', question:'What must they synchronize?', options:['Chronometers', 'Altimeters', 'Radios', 'Squawk codes'], answerIndex:0 }
+  ],
+  fill: [
+    { prefix:'The pilot', gap:'_____', suffix:'check the METAR before departure.', options:['must','can','could','may'], answer:'must', tense:'Modal Obligation' },
+    { prefix:'We', gap:'_____', suffix:'request a higher altitude.', options:['can','must','should','will'], answer:'can', tense:'Modal Ability' },
+    { prefix:'The flight', gap:'_____', suffix:'be delayed due to low visibility.', options:['may','must','should','will'], answer:'may', tense:'Modal Possibility' },
+    { prefix:'Pilots', gap:'_____', suffix:'readback the ATC instruction.', options:['must','can','could','may'], answer:'must', tense:'Modal Obligation' },
+    { prefix:'The aircraft', gap:'_____', suffix:'arrive at 1500 Zulu.', options:['is going to','will','must','should'], answer:'is going to', tense:'Future Going To' },
+    { prefix:'We', gap:'_____', suffix:'avoid the turbulence by climbing.', options:['can','must','should','will'], answer:'can', tense:'Modal Ability' },
+    { prefix:'The pilot', gap:'_____', suffix:'not land due to wind shear.', options:['could','can','may','must'], answer:'could', tense:'Past Modal' },
+    { prefix:'ATC', gap:'_____', suffix:'provide the weather report.', options:['will','is going to','must','should'], answer:'will', tense:'Future WILL' },
+    { prefix:'The ATIS', gap:'_____', suffix:'information about the ceiling.', options:['provides','is providing','provided','has provided'], answer:'provides', tense:'Present Simple' },
+    { prefix:'The crew', gap:'_____', suffix:'the METAR at the moment.', options:['is checking','checks','checked','has checked'], answer:'is checking', tense:'Present Continuous' },
+    { prefix:'We', gap:'_____', suffix:'postpone the flight.', options:['must','can','may','should'], answer:'must', tense:'Modal Obligation' },
+    { prefix:'The pilot', gap:'_____', suffix:'the heading to avoid the weather.', options:['will adjust','adjusts','adjusted','has adjusted'], answer:'will adjust', tense:'Future WILL' },
+    { prefix:'The ceiling', gap:'_____', suffix:'the height of the lowest cloud layer.', options:['is','was','has been','will be'], answer:'is', tense:'Present Simple' },
+    { prefix:'The crosswind', gap:'_____', suffix:'dangerous during landing.', options:['can be','must be','should be','will be'], answer:'can be', tense:'Modal Ability' },
+    { prefix:'The pilot', gap:'_____', suffix:'the chronometer before the flight.', options:['synchronized','is synchronizing','synchronizes','has synchronized'], answer:'synchronized', tense:'Past Simple' }
+  ],
+  speak: [
+    'The pilot must check the METAR before departure.',
+    'We can request a higher altitude.',
+    'Could we avoid the turbulence by climbing?',
+    'We are going to arrive at one five four zero Zulu.',
+    'Pilots must readback the clearance.',
+    'The crosswind is 20 knots, so the pilot must adjust the approach.',
+    'The flight is delayed due to low visibility.',
+    'The pilot could not land due to wind shear.',
+    'The ETD is zero nine three zero Zulu.',
+    'Pilots must synchronize their chronometers.'
+  ],
+  reading: {
+    passage: `Pilots must always check the METAR before departure. The METAR provides crucial information about visibility, ceiling, and wind. If visibility is low, the flight may be delayed. Pilots can request a different runway if the crosswind is too strong. During the flight, they must readback all ATC instructions and synchronize their chronometers to Zulu Time. Weather conditions can worsen, so pilots must adjust their route to avoid turbulence and wind shear.`,
+    questions: [
+      { q: 'What must pilots check before departure?', options: ['The ETD', 'The METAR', 'The slot', 'The ATIS'], answer: 1 },
+      { q: 'What does the METAR provide information about?', options: ['Visibility and ceiling', 'Passenger count', 'Cargo weight', 'Duty-free sales'], answer: 0 },
+      { q: 'What can pilots request if the crosswind is strong?', options: ['A different runway', 'A different aircraft', 'A different crew', 'A delay'], answer: 0 },
+      { q: 'What must pilots do with ATC instructions?', options: ['Readback', 'Postpone', 'Synchronize', 'Adjust'], answer: 0 },
+      { q: 'What must pilots adjust to avoid turbulence?', options: ['Their route', 'Their seat', 'Their watch', 'Their radio'], answer: 0 }
+    ]
+  }
+};
+
+const TCP_DATA = {
+  title: "Flight 10 — Duty-Free & Payments",
+  sub: "On-Board Sales, Currency & Passenger Service",
+  badge: "Flight 10 · TCP Version",
+  footer: "Cabin Crew (TCP)",
+  words: [
+    { word:'Duty-Free', svgKey:'dutyfree', structure:'Duty-Free items', sentence:'We sell duty-free items on board.' },
+    { word:'Credit Card', svgKey:'creditcard', structure:'A credit card', sentence:'Can I pay with a credit card?' },
+    { word:'Cash', svgKey:'cash', structure:'Cash payment', sentence:'Do you accept cash?' },
+    { word:'Currency', svgKey:'cash', structure:'Local currency', sentence:'We accept different currencies.' },
+    { word:'Receipt', svgKey:'creditcard', structure:'The receipt', sentence:'Here is your receipt.' },
+    { word:'Change', svgKey:'cash', structure:'Give change', sentence:'Here is your change.' },
+    { word:'Perfume', svgKey:'dutyfree', structure:'A perfume', sentence:'Would you like to buy this perfume?' },
+    { word:'Cosmetics', svgKey:'dutyfree', structure:'Cosmetics', sentence:'We have a new line of cosmetics.' },
+    { word:'Price List', svgKey:'dutyfree', structure:'The price list', sentence:'Please check the price list.' },
+    { word:'Discount', svgKey:'dutyfree', structure:'A discount', sentence:'We offer a 10% discount today.' },
+    { word:'Buy', svgKey:'cash', structure:'To buy', sentence:'I want to buy this perfume.' },
+    { word:'Sell', svgKey:'cash', structure:'To sell', sentence:'We sell duty-free items.' },
+    { word:'Charge', svgKey:'creditcard', structure:'To charge', sentence:'I will charge your card.' },
+    { word:'Pay', svgKey:'creditcard', structure:'To pay', sentence:'How would you like to pay?' },
+    { word:'Accept', svgKey:'cash', structure:'To accept', sentence:'We accept all major credit cards.' },
+    { word:'Cost', svgKey:'dutyfree', structure:'To cost', sentence:'How much does this cost?' },
+    { word:'Exchange', svgKey:'cash', structure:'To exchange', sentence:'Can I exchange currency on board?' },
+    { word:'Passenger', svgKey:'plane', structure:'The passenger', sentence:'The passenger is asking for a discount.' },
+    { word:'Trolley', svgKey:'dutyfree', structure:'The trolley', sentence:'The crew is pushing the trolley.' },
+    { word:'Galley', svgKey:'plane', structure:'The galley', sentence:'The items are stored in the galley.' }
+  ],
+  match: [
+    { word:'Duty-Free', definition:'Goods sold without tax on board' },
+    { word:'Credit Card', definition:'A plastic card used for payment' },
+    { word:'Cash', definition:'Physical money (coins or notes)' },
+    { word:'Currency', definition:'The money system of a country' },
+    { word:'Receipt', definition:'A document proving payment' },
+    { word:'Change', definition:'Money returned after paying' },
+    { word:'Perfume', definition:'A fragrant liquid for personal use' },
+    { word:'Cosmetics', definition:'Makeup or beauty products' },
+    { word:'Price List', definition:'A document showing the cost of items' },
+    { word:'Discount', definition:'A reduction in price' },
+    { word:'Buy', definition:'To purchase something' },
+    { word:'Sell', definition:'To give something in exchange for money' },
+    { word:'Charge', definition:'To ask for payment' },
+    { word:'Pay', definition:'To give money for something' },
+    { word:'Accept', definition:'To agree to take something' },
+    { word:'Cost', definition:'The price of something' },
+    { word:'Exchange', definition:'To swap one currency for another' },
+    { word:'Passenger', definition:'A person traveling on the aircraft' },
+    { word:'Trolley', definition:'A cart used to serve items' },
+    { word:'Galley', definition:'The kitchen area on the aircraft' }
+  ],
+  lc: [
+    { type:'conversation', context:'CABIN — Payment', audio:'Passenger: How much does this perfume cost? TCP: It costs fifty dollars. You can pay by cash or credit card.', question:'How much does the perfume cost?', options:[{text:'$50',svgKey:'cash'},{text:'$15',svgKey:'cash'},{text:'$100',svgKey:'cash'},{text:'$25',svgKey:'cash'}], answerIndex:0 },
+    { type:'description', context:'CABIN — Payment', audio:'This is a plastic card used to pay for items on board.', question:'What is being described?', options:[{text:'A Credit Card',svgKey:'creditcard'},{text:'Cash',svgKey:'cash'},{text:'A Receipt',svgKey:'creditcard'},{text:'A Trolley',svgKey:'dutyfree'}], answerIndex:0 },
+    { type:'conversation', context:'CABIN — Duty-Free', audio:'Passenger: Do you sell cosmetics? TCP: Yes, we have a new line of cosmetics on the trolley.', question:'What does the passenger want to buy?', options:[{text:'Cosmetics',svgKey:'dutyfree'},{text:'Perfume',svgKey:'dutyfree'},{text:'A receipt',svgKey:'creditcard'},{text:'Cash',svgKey:'cash'}], answerIndex:0 },
+    { type:'description', context:'CABIN — Currency', audio:'This is the money system used in a specific country.', question:'What is being described?', options:[{text:'Currency',svgKey:'cash'},{text:'Change',svgKey:'cash'},{text:'A Receipt',svgKey:'creditcard'},{text:'A Discount',svgKey:'dutyfree'}], answerIndex:0 },
+    { type:'conversation', context:'CABIN — Change', audio:'Passenger: Here is 100 dollars. TCP: Thank you. Here is your change and your receipt.', question:'What did the TCP give the passenger?', options:[{text:'Change and a receipt',svgKey:'creditcard'},{text:'A discount',svgKey:'dutyfree'},{text:'A new trolley',svgKey:'dutyfree'},{text:'A credit card',svgKey:'creditcard'}], answerIndex:0 },
+    { type:'description', context:'CABIN — Discount', audio:'The airline offers a 10% reduction on all items today.', question:'What is being offered?', options:[{text:'A Discount',svgKey:'dutyfree'},{text:'A Receipt',svgKey:'creditcard'},{text:'Cash',svgKey:'cash'},{text:'Change',svgKey:'cash'}], answerIndex:0 },
+    { type:'conversation', context:'CABIN — Obligation', audio:'TCP: You must keep your receipt for the customs declaration.', question:'What must the passenger keep?', options:[{text:'The receipt',svgKey:'creditcard'},{text:'The cash',svgKey:'cash'},{text:'The credit card',svgKey:'creditcard'},{text:'The cosmetics',svgKey:'dutyfree'}], answerIndex:0 },
+    { type:'description', context:'CABIN — Exchange', audio:'This action means swapping one currency for another.', question:'What action is being described?', options:[{text:'Exchange',svgKey:'cash'},{text:'Charge',svgKey:'creditcard'},{text:'Buy',svgKey:'dutyfree'},{text:'Pay',svgKey:'creditcard'}], answerIndex:0 },
+    { type:'conversation', context:'CABIN — Cost', audio:'Passenger: How much does this cost? TCP: It costs twenty euros.', question:'What does the passenger want to know?', options:[{text:'The cost',svgKey:'dutyfree'},{text:'The exchange rate',svgKey:'cash'},{text:'The receipt',svgKey:'creditcard'},{text:'The discount',svgKey:'dutyfree'}], answerIndex:0 },
+    { type:'description', context:'CABIN — Items', audio:'These are fragrant liquids, often sold duty-free on board.', question:'What items are being described?', options:[{text:'Perfumes',svgKey:'dutyfree'},{text:'Cosmetics',svgKey:'dutyfree'},{text:'Snacks',svgKey:'dutyfree'},{text:'Drinks',svgKey:'dutyfree'}], answerIndex:0 }
+  ],
+  la: [
+    { context:'CABIN — MUST', audio:'You must keep your receipt for customs.', question:'What must the passenger keep?', options:['The receipt', 'The cash', 'The credit card', 'The perfume'], answerIndex:0 },
+    { context:'CABIN — CAN', audio:'Can I pay with a credit card?', question:'What does the passenger want to do?', options:['Pay with a credit card', 'Pay with cash', 'Exchange currency', 'Get a discount'], answerIndex:0 },
+    { context:'CABIN — COULD', audio:'Could you give me a discount on this perfume?', question:'What is the passenger requesting?', options:['A discount', 'A receipt', 'A credit card', 'A different item'], answerIndex:0 },
+    { context:'CABIN — COST', audio:'How much does this cosmetics set cost?', question:'What does the passenger want to know?', options:['The cost', 'The exchange rate', 'The discount', 'The receipt'], answerIndex:0 },
+    { context:'CABIN — CURRENCY', audio:'We accept different currencies on board.', question:'What do they accept?', options:['Different currencies', 'Only credit cards', 'Only cash', 'Only euros'], answerIndex:0 },
+    { context:'CABIN — CHANGE', audio:'Here is your change: ten dollars and fifty cents.', question:'What is the TCP giving?', options:['Change', 'A receipt', 'A discount', 'A credit card'], answerIndex:0 },
+    { context:'CABIN — OBLIGATION', audio:'All passengers must declare duty-free items at customs.', question:'What must passengers declare?', options:['Duty-free items', 'Their luggage', 'Their credit cards', 'Their receipts'], answerIndex:0 },
+    { context:'CABIN — ABILITY', audio:'We can sell duty-free items during the flight.', question:'What can they sell?', options:['Duty-free items', 'Tickets', 'Luggage', 'Seats'], answerIndex:0 },
+    { context:'CABIN — PAST', audio:'The passenger bought a perfume and paid with cash.', question:'How did the passenger pay?', options:['With cash', 'With a credit card', 'With a discount', 'With a receipt'], answerIndex:0 },
+    { context:'CABIN — OBLIGATION', audio:'The crew must check the price list before the service.', question:'What must the crew check?', options:['The price list', 'The receipt', 'The currency', 'The discount'], answerIndex:0 }
+  ],
+  fill: [
+    { prefix:'You', gap:'_____', suffix:'keep your receipt for customs.', options:['must','can','could','may'], answer:'must', tense:'Modal Obligation' },
+    { prefix:'Can I', gap:'_____', suffix:'with a credit card?', options:['pay','sell','buy','charge'], answer:'pay', tense:'Modal Ability' },
+    { prefix:'Could you give me a', gap:'_____', suffix:'on this perfume?', options:['discount','receipt','change','price'], answer:'discount', tense:'Modal Request' },
+    { prefix:'How much does this', gap:'_____', suffix:'?', options:['cost','pay','charge','exchange'], answer:'cost', tense:'Present Simple' },
+    { prefix:'We accept different', gap:'_____', suffix:'on board.', options:['currencies','receipts','changes','discounts'], answer:'currencies', tense:'Present Simple' },
+    { prefix:'Here is your', gap:'_____', suffix:': ten dollars and fifty cents.', options:['change','receipt','discount','card'], answer:'change', tense:'Present Simple' },
+    { prefix:'All passengers', gap:'_____', suffix:'declare duty-free items at customs.', options:['must','can','could','may'], answer:'must', tense:'Modal Obligation' },
+    { prefix:'We', gap:'_____', suffix:'sell duty-free items during the flight.', options:['can','must','should','will'], answer:'can', tense:'Modal Ability' },
+    { prefix:'The passenger', gap:'_____', suffix:'a perfume and paid with cash yesterday.', options:['bought','buys','is buying','has bought'], answer:'bought', tense:'Past Simple' },
+    { prefix:'The crew', gap:'_____', suffix:'the price list before the service.', options:['must check','can check','could check','may check'], answer:'must check', tense:'Modal Obligation' },
+    { prefix:'We', gap:'_____', suffix:'a 10% discount today.', options:['are offering','offer','offered','have offered'], answer:'are offering', tense:'Present Continuous' },
+    { prefix:'The TCP', gap:'_____', suffix:'the items on the trolley right now.', options:['is selling','sells','sold','has sold'], answer:'is selling', tense:'Present Continuous' },
+    { prefix:'The passenger', gap:'_____', suffix:'to exchange currency.', options:['wants','is wanting','wanted','has wanted'], answer:'wants', tense:'Present Simple' },
+    { prefix:'We', gap:'_____', suffix:'accept cash on board.', options:['can','must','should','will'], answer:'can', tense:'Modal Ability' },
+    { prefix:'The receipt', gap:'_____', suffix:'the proof of payment.', options:['is','was','has been','will be'], answer:'is', tense:'Present Simple' }
+  ],
+  speak: [
+    'You must keep your receipt for customs.',
+    'Can I pay with a credit card?',
+    'Could you give me a discount on this perfume?',
+    'How much does this cosmetics set cost?',
+    'We accept different currencies on board.',
+    'Here is your change: ten dollars and fifty cents.',
+    'All passengers must declare duty-free items at customs.',
+    'We can sell duty-free items during the flight.',
+    'The passenger bought a perfume and paid with cash.',
+    'The crew must check the price list before the service.'
+  ],
+  reading: {
+    passage: `On-board duty-free sales are an important part of cabin service. The crew must check the price list before the service. They sell items like perfume, cosmetics, and other goods. Passengers can pay with cash or credit card. The crew must accept different currencies and give the correct change. They must also provide a receipt for every purchase. Passengers must keep their receipts for customs. Today, the airline is offering a 10% discount on all items, so the crew is selling a lot of products.`,
+    questions: [
+      { q: 'What must the crew check before the service?', options: ['The METAR', 'The price list', 'The flight plan', 'The fuel'], answer: 1 },
+      { q: 'What items are sold on board?', options: ['Perfume and cosmetics', 'Cars', 'Houses', 'Tickets'], answer: 0 },
+      { q: 'How can passengers pay?', options: ['With cash or credit card', 'Only with cash', 'Only with credit card', 'With crypto'], answer: 0 },
+      { q: 'What must the crew provide for every purchase?', options: ['A receipt', 'A discount', 'A free gift', 'A ticket'], answer: 0 },
+      { q: 'Why is the crew selling a lot of products today?', options: ['Because they have a 10% discount', 'Because the flight is delayed', 'Because they have a new trolley', 'Because the passengers are hungry'], answer: 0 }
+    ]
+  }
+};
+
+// ============================================================
+// STATE & LOGIC
+// ============================================================
+let currentRole = 'pilot';
+let CORE_WORDS = [];
+let MATCH_PAIRS = [];
+let LC_ROUNDS = [];
+let LISTEN_POOL = [];
+let FILL_BLANK = [];
+let SPEECH_PRACTICE = [];
+let READING_PASSAGE = '';
+let READING_QUESTIONS = [];
+
+let wordStatus = {}, wordIndex = 0, stepIndex = 1, wordsDone = [];
+let matchPairs = [], matchIndex = 0, matchCorrect = 0, matchWrong = 0;
+let lcRounds = [], lcIndex = 0, lcCorrect = 0, lcWrong = 0, lcAnswered = false;
+let listenRounds = [], listenIndex = 0, listenCorrect = 0, listenWrong = 0, listenAnswered = false;
+let fbIndex = 0, fbScore = 0, fbWrong = 0, fbOptionsCache = [];
+let spIndex = 0, spScore = 0, spWrong = 0, recognizing = false;
+let readIndex = 0, readCorrect = 0, readWrong = 0, readAnswered = false;
+
+function loadRole(role) {
+  currentRole = role;
+  const data = role === 'pilot' ? PILOT_DATA : TCP_DATA;
+
+  CORE_WORDS = data.words;
+  MATCH_PAIRS = data.match;
+  LC_ROUNDS = data.lc;
+  LISTEN_POOL = data.la;
+  FILL_BLANK = data.fill;
+  SPEECH_PRACTICE = data.speak;
+  READING_PASSAGE = data.reading.passage;
+  READING_QUESTIONS = data.reading.questions;
+
+  document.getElementById('headerTitle').textContent = data.title;
+  document.getElementById('headerSub').textContent = data.sub + " · Minimum 80% to pass";
+  document.getElementById('headerBadge').textContent = data.badge;
+  document.getElementById('footerText').innerHTML = `✈️ Flight 10 · <span>${data.footer}</span>`;
+  
+  document.getElementById('roleSelector').style.display = 'none';
+  document.getElementById('appContainer').style.display = 'block';
+
+  resetAll();
+}
+
+function switchRole() {
+  document.getElementById('roleSelector').style.display = 'flex';
+  document.getElementById('appContainer').style.display = 'none';
+}
+
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US'; u.rate = 0.7; u.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const enVoice = voices.find(v => v.lang === 'en-US') || voices.find(v => v.lang && v.lang.startsWith('en'));
+  if(enVoice) u.voice = enVoice;
+  window.speechSynthesis.speak(u);
+}
+window.speechSynthesis && window.speechSynthesis.getVoices();
+
+function shuffle(arr){
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a;
+}
+function normalize(str){ return str.toLowerCase().replace(/[^a-z0-9\s]/g,'').split(/\s+/).filter(Boolean); }
+function matchScore(target, heard){
+  const t = normalize(target); const h = new Set(normalize(heard));
+  let hits = 0; t.forEach(w => { if(h.has(w)) hits++; });
+  return t.length ? hits / t.length : 0;
+}
+function playDing(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1320].forEach((freq, i)=>{
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      const start = ctx.currentTime + i*0.09;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.2, start+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start+0.25);
+      osc.connect(gain).connect(ctx.destination); osc.start(start); osc.stop(start+0.28);
+    });
+  }catch(e){}
+}
+function playBuzz(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.value = 130;
+    const start = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.15, start+0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start+0.35);
+    osc.connect(gain).connect(ctx.destination); osc.start(start); osc.stop(start+0.38);
+  }catch(e){}
+}
+
+const phaseBtns = document.querySelectorAll('.phase-btn');
+const phases = document.querySelectorAll('.phase');
+function goToPhase(n){
+  phases.forEach(p => p.classList.remove('active'));
+  phaseBtns.forEach(b => b.classList.remove('active'));
+  document.getElementById('phase'+n).classList.add('active');
+  document.querySelector(`.phase-btn[data-phase="${n}"]`).classList.add('active');
+  document.getElementById('topProgress').style.width = (n/8*100)+'%';
+  window.scrollTo({top:0, behavior:'smooth'});
+  if(n == 8) renderFinalNote();
+}
+phaseBtns.forEach(btn=>{ btn.addEventListener('click', ()=> goToPhase(parseInt(btn.dataset.phase))); });
+
+// ============================================================
+// SECTIONS
+// ============================================================
+function buildWordDots(){
+  const dots = document.getElementById('wordDots');
+  dots.innerHTML = CORE_WORDS.map((w,i)=>{
+    const status = wordStatus[w.word] || { correct:0, wrong:0 };
+    let cls = 'word-dot';
+    if(i === wordIndex) cls += ' active';
+    if(wordsDone[i]){ cls += status.wrong > 0 ? ' failed' : ' done'; }
+    return `<div class="${cls}" data-i="${i}">${i+1}</div>`;
+  }).join('');
+  dots.querySelectorAll('.word-dot').forEach(d=>{
+    d.addEventListener('click', ()=>{ wordIndex = parseInt(d.dataset.i); stepIndex = 1; renderStepper(); });
+  });
+  updateWordStats();
+}
+function updateWordStats(){
+  let c=0,w=0;
+  CORE_WORDS.forEach((item, i)=>{
+    const status = wordStatus[item.word] || { correct:0, wrong:0 };
+    if(wordsDone[i]){ c += status.correct || 0; w += status.wrong || 0; }
+  });
+  document.getElementById('wordCorrect').textContent = c;
+  document.getElementById('wordWrong').textContent = w;
+}
+function renderStepper(){
+  const w = CORE_WORDS[wordIndex];
+  document.getElementById('stepImage').innerHTML = ICONS[w.svgKey];
+  ['tag1','tag2','tag3'].forEach((id,i)=>{ document.getElementById(id).classList.toggle('on', i+1 === stepIndex); });
+  let text = '', hint = '';
+  if(stepIndex === 1){ text = w.word; hint = 'STEP 1 — LEARN THE WORD'; }
+  if(stepIndex === 2){ text = w.structure; hint = 'STEP 2 — STRUCTURE'; }
+  if(stepIndex === 3){ text = w.sentence; hint = 'STEP 3 — SENTENCE IN CONTEXT'; }
+  document.getElementById('stepText').textContent = text;
+  document.getElementById('stepHint').textContent = hint;
+  document.getElementById('stepSpeakBtn').onclick = ()=> speak(text);
+  document.getElementById('prevStepBtn').disabled = (wordIndex===0 && stepIndex===1);
+  const micBtn = document.getElementById('stepMicBtn');
+  const transcriptEl = document.getElementById('stepTranscript');
+  const feedbackEl = document.getElementById('stepFeedback');
+  if(stepIndex === 1 || stepIndex === 3){
+    micBtn.style.display = 'inline-flex';
+    micBtn.onclick = ()=> requestStepMic(text, w.word);
+  } else { micBtn.style.display = 'none'; }
+  transcriptEl.textContent = ''; feedbackEl.textContent = ''; feedbackEl.className = 'sp-feedback';
+  const nextBtn = document.getElementById('nextStepBtn');
+  if(stepIndex < 3){ nextBtn.textContent = 'Next →'; }
+  else if(wordIndex < CORE_WORDS.length - 1){ nextBtn.textContent = 'Next Word →'; }
+  else { nextBtn.textContent = 'Finish Section ✓'; }
+  buildWordDots(); speak(text);
+}
+
+let stepRecognizing = false;
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+function requestStepMic(target, word){
+  const transcriptEl = document.getElementById('stepTranscript');
+  const feedbackEl = document.getElementById('stepFeedback');
+  transcriptEl.textContent = ''; feedbackEl.textContent = ''; feedbackEl.className = 'sp-feedback';
+  if(!SpeechRecognitionAPI){ feedbackEl.textContent = '🎙️ Speech recognition not supported.'; feedbackEl.className = 'sp-feedback bad'; return; }
+  if(stepRecognizing) return;
+  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{ stream.getTracks().forEach(t=>t.stop()); startStepRecognition(target, word); })
+      .catch(()=>{ feedbackEl.textContent = '🎙️ Microphone permission required.'; feedbackEl.className = 'sp-feedback bad'; });
+  } else { startStepRecognition(target, word); }
+}
+function startStepRecognition(target, word){
+  const micBtn = document.getElementById('stepMicBtn');
+  const transcriptEl = document.getElementById('stepTranscript');
+  const feedbackEl = document.getElementById('stepFeedback');
+  const rec = new SpeechRecognitionAPI();
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 4;
+  stepRecognizing = true; micBtn.classList.add('listening'); transcriptEl.textContent = 'Listening...';
+  rec.onresult = (event)=>{
+    let bestHeard = event.results[0][0].transcript;
+    let bestScore = matchScore(target, bestHeard);
+    for(let i=1;i<event.results[0].length;i++){ const alt = event.results[0][i].transcript; const s = matchScore(target, alt); if(s > bestScore){ bestScore = s; bestHeard = alt; } }
+    transcriptEl.textContent = `You said: "${bestHeard}"`;
+    const status = wordStatus[word] || { correct:0, wrong:0 };
+    if(bestScore >= 0.4){ status.correct = (status.correct || 0) + 1; feedbackEl.textContent = `✅ Great! You said "${word}" correctly.`; feedbackEl.className = 'sp-feedback ok'; playDing(); }
+    else { status.wrong = (status.wrong || 0) + 1; feedbackEl.textContent = `❌ Try again. Say "${word}" clearly.`; feedbackEl.className = 'sp-feedback bad'; playBuzz(); }
+    wordStatus[word] = status; updateWordStats(); buildWordDots();
+  };
+  rec.onerror = ()=>{ stepRecognizing = false; micBtn.classList.remove('listening'); feedbackEl.textContent = '🎙️ Audio error. Try again.'; feedbackEl.className = 'sp-feedback bad'; };
+  rec.onend = ()=>{ stepRecognizing = false; micBtn.classList.remove('listening'); };
+  rec.start();
+}
+document.getElementById('nextStepBtn').addEventListener('click', ()=>{
+  if(stepIndex < 3){ stepIndex++; }
+  else { wordsDone[wordIndex] = true; if(wordIndex < CORE_WORDS.length - 1){ wordIndex++; stepIndex = 1; } else { goToPhase(2); return; } }
+  renderStepper();
+});
+document.getElementById('prevStepBtn').addEventListener('click', ()=>{
+  if(stepIndex > 1){ stepIndex--; } else if(wordIndex > 0){ wordIndex--; stepIndex = 3; }
+  renderStepper();
+});
+
+// SECTION 2
+function setupMatch(){
+  matchPairs = shuffle(MATCH_PAIRS.map(p => ({...p, matched: false})));
+  matchIndex = 0; matchCorrect = 0; matchWrong = 0; loadMatchRound();
+}
+function loadMatchRound(){
+  const area = document.getElementById('matchArea');
+  const total = MATCH_PAIRS.length;
+  document.getElementById('matchProgress').style.width = (matchIndex/total*100)+'%';
+  if(matchIndex >= total){
+    document.getElementById('matchProgress').style.width = '100%';
+    const totalAnswers = matchCorrect + matchWrong;
+    const pct = totalAnswers > 0 ? Math.round((matchCorrect / totalAnswers) * 100) : 0;
+    const passed = pct >= 80;
+    area.innerHTML = `<div class="fb-card" style="text-align:center;">
+      <div style="font-size:72px;">${passed ? '🥇' : '🔄'}</div>
+      <h3 style="color:${passed ? 'var(--green)' : 'var(--red)'};margin-top:0;">${passed ? '✅ ¡Sección completada!' : '❌ Necesitas 80% para pasar'}</h3>
+      <p style="color:var(--muted);">✅ Aciertos: ${matchCorrect} | ❌ Fallos: ${matchWrong} | 📊 ${pct}%</p>
+      ${passed ? `<button class="nav-btn" id="matchContinueBtn" style="margin-top:16px;">Continuar →</button>` : `<button class="restart-btn" id="matchRetryBtn" style="margin-top:16px;">🔄 Repetir la sección</button>`}
+    </div>`;
+    if(passed){ document.getElementById('matchContinueBtn').onclick = ()=> goToPhase(3); }
+    else { document.getElementById('matchRetryBtn').onclick = ()=> setupMatch(); }
+    return;
+  }
+  const start = matchIndex; const end = Math.min(matchIndex + 3, total);
+  const roundPairs = matchPairs.slice(start, end); const remaining = total - end;
+  const words = shuffle(roundPairs.map(p => p.word));
+  const defs = shuffle(roundPairs.map(p => p.definition));
+  area.innerHTML = `
+    <div class="fb-card">
+      <div class="fb-top">
+        <div class="fb-num">PAIR ${matchIndex+1}-${end} / ${total}</div>
+        <div class="fb-score">✅ ${matchCorrect} | ❌ ${matchWrong}</div>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Match each aviation term with its English definition.</p>
+      <div class="match-grid" id="matchGrid">
+        ${words.map(w => `<div class="match-item word-item" data-type="word" data-value="${w}"><span class="m-icon">📝</span> ${w}</div>`).join('')}
+        ${defs.map(d => `<div class="match-item def-item" data-type="def" data-value="${d}"><span class="m-icon">💡</span> ${d}</div>`).join('')}
+      </div>
+      <div class="match-pair-status" id="matchStatus"></div>
+      ${remaining > 0 ? `<button class="nav-btn" id="matchNextBtn" style="margin-top:16px;">Siguiente ronda →</button>` : ''}
+    </div>`;
+  let selected = null; const status = document.getElementById('matchStatus');
+  const items = document.querySelectorAll('.match-item'); let matchedPairs = 0;
+  items.forEach(item => {
+    item.addEventListener('click', function(){
+      if(this.classList.contains('matched')) return;
+      if(!selected){ selected = this; this.classList.add('selected'); return; }
+      if(selected === this){ this.classList.remove('selected'); selected = null; return; }
+      const type1 = selected.dataset.type; const type2 = this.dataset.type;
+      const val1 = selected.dataset.value; const val2 = this.dataset.value;
+      if(type1 === type2){ selected.classList.remove('selected'); selected = this; this.classList.add('selected'); return; }
+      let word, def;
+      if(type1 === 'word'){ word = val1; def = val2; } else { word = val2; def = val1; }
+      const pair = MATCH_PAIRS.find(p => p.word === word && p.definition === def);
+      if(pair){
+        this.classList.add('matched'); selected.classList.add('matched'); selected.classList.remove('selected');
+        matchCorrect++; matchedPairs++; status.textContent = '✅ ¡Correcto!'; status.style.color = 'var(--green)'; playDing(); selected = null;
+        if(matchedPairs === roundPairs.length){
+          status.textContent = `✅ ¡Ronda completa!`;
+          const nextBtn = document.getElementById('matchNextBtn');
+          if(nextBtn) { nextBtn.style.display = 'inline-block'; nextBtn.onclick = ()=>{ matchIndex = end; loadMatchRound(); }; }
+          if(remaining === 0 && matchIndex + 3 >= total){ setTimeout(()=>{ matchIndex = total; loadMatchRound(); }, 1500); }
+        }
+      } else {
+        this.classList.add('wrong-match'); selected.classList.add('wrong-match'); matchWrong++;
+        status.textContent = '❌ Incorrecto. Intenta de nuevo.'; status.style.color = 'var(--red)'; playBuzz();
+        setTimeout(()=>{ this.classList.remove('wrong-match'); selected.classList.remove('wrong-match'); selected.classList.remove('selected'); selected = null; }, 600);
+      }
+    });
+  });
+  if(remaining === 0){
+    const nextBtn = document.getElementById('matchNextBtn');
+    if(nextBtn) { nextBtn.textContent = 'Completar sección ✓'; nextBtn.onclick = ()=>{ matchIndex = total; loadMatchRound(); }; }
+  }
+}
+
+// SECTION 3
+function setupListenClick(){
+  lcRounds = shuffle(LC_ROUNDS); lcIndex = 0; lcCorrect = 0; lcWrong = 0; lcAnswered = false; renderListenClickRound();
+}
+function renderListenClickRound(){
+  const panel = document.getElementById('listenClickPanel'); const total = lcRounds.length;
+  if(lcIndex >= total){
+    const totalAnswers = lcCorrect + lcWrong; const pct = totalAnswers > 0 ? Math.round((lcCorrect / totalAnswers) * 100) : 0; const passed = pct >= 80;
+    panel.innerHTML = `
+      <div class="lc-complete ${passed ? 'pass' : 'fail'}">
+        <div style="font-size:72px;">${passed ? '🥇' : '🔄'}</div>
+        <h3>${passed ? '✅ ¡Sección completada!' : '❌ Necesitas 80% para pasar'}</h3>
+        <div class="score-big">${pct}%</div>
+        <div class="score-sub">✅ Aciertos: ${lcCorrect} &nbsp;|&nbsp; ❌ Fallos: ${lcWrong}</div>
+        ${passed ? `<button class="nav-btn" id="lcContinueBtn" style="margin-top:16px;">Continuar a Listen & Answer →</button>` : `<button class="restart-btn" id="lcRetryBtn">🔄 Repetir la sección</button>`}
+      </div>`;
+    if(passed){ document.getElementById('lcContinueBtn').onclick = ()=> goToPhase(4); } else { document.getElementById('lcRetryBtn').onclick = ()=> setupListenClick(); }
+    return;
+  }
+  lcAnswered = false; const round = lcRounds[lcIndex];
+  const totalAnswers = lcCorrect + lcWrong; const currentPct = totalAnswers > 0 ? Math.round((lcCorrect / totalAnswers) * 100) : 100;
+  panel.innerHTML = `
+    <div class="lc-header">
+      <div class="lc-round">ROUND ${lcIndex + 1} / ${total}</div>
+      <div class="lc-score-box"><span class="good">✅ ${lcCorrect}</span><span class="bad">❌ ${lcWrong}</span><span>📊 ${currentPct}%</span></div>
+    </div>
+    <div class="lc-instruction">${round.type === 'conversation' ? '🎧 Listen to the conversation' : '🎧 Listen to the description'}</div>
+    <div class="lc-subinstruction">${round.context}</div>
+    <button class="lc-big-speak pulsing" id="lcSpeakBtn">🔊</button>
+    <div class="listen-question" style="margin:10px auto 22px;max-width:620px;">
+      <span class="q-tag">❓ Question</span>${round.question}
+    </div>
+    <div class="lc-images lc-images-4" id="lcImages">
+      ${round.options.map((opt, i) => `<div class="lc-img-card" data-i="${i}">${ICONS[opt.svgKey]}<div class="lc-img-label">${opt.text}</div></div>`).join('')}
+    </div>
+    <div class="lc-feedback" id="lcFeedback"></div>`;
+  const speakAudio = ()=> speak(round.audio);
+  document.getElementById('lcSpeakBtn').onclick = speakAudio; setTimeout(speakAudio, 500);
+  const imgCards = document.querySelectorAll('.lc-img-card');
+  imgCards.forEach(card => {
+    card.addEventListener('click', () => {
+      if(lcAnswered) return; lcAnswered = true;
+      const selectedIdx = parseInt(card.dataset.i); const feedback = document.getElementById('lcFeedback'); const correctText = round.options[round.answerIndex].text;
+      if(selectedIdx === round.answerIndex){
+        card.classList.add('correct'); lcCorrect++; feedback.textContent = `✅ ¡Correcto! "${correctText}"`; feedback.className = 'lc-feedback ok'; playDing();
+        setTimeout(()=>{ lcIndex++; renderListenClickRound(); }, 1400);
+      } else {
+        card.classList.add('wrong'); lcWrong++; feedback.textContent = `❌ Incorrecto. Era "${correctText}"`; feedback.className = 'lc-feedback bad'; playBuzz();
+        imgCards.forEach(c => { if(parseInt(c.dataset.i) === round.answerIndex) c.classList.add('correct'); });
+        setTimeout(()=>{ lcIndex++; renderListenClickRound(); }, 2200);
+      }
+    });
+  });
+}
+
+// SECTION 4
+function setupListening(){
+  listenRounds = shuffle(LISTEN_POOL); listenIndex = 0; listenCorrect = 0; listenWrong = 0; listenAnswered = false;
+  document.getElementById('listenCorrect').textContent = '0'; document.getElementById('listenWrong').textContent = '0'; loadListenRound();
+}
+function loadListenRound(){
+  if(listenIndex >= listenRounds.length){
+    const totalAnswers = listenCorrect + listenWrong; const pct = totalAnswers > 0 ? Math.round((listenCorrect / totalAnswers) * 100) : 0; const passed = pct >= 80;
+    document.getElementById('listenCount').textContent = 'Section complete!';
+    document.getElementById('bigSpeakBtn').style.display = 'none';
+    document.getElementById('listenContext').style.display = 'none';
+    document.getElementById('listenQuestion').style.display = 'none';
+    document.getElementById('listenOptions').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;">
+      <div style="font-size:72px;">${passed ? '🥇' : '🔄'}</div>
+      <h3 style="color:${passed ? 'var(--green)' : 'var(--red)'};margin:10px 0;">${passed ? '✅ ¡Sección completada!' : '❌ Necesitas 80% para pasar'}</h3>
+      <p style="color:var(--muted);">✅ Aciertos: ${listenCorrect} | ❌ Fallos: ${listenWrong} | 📊 ${pct}%</p>
+      ${passed ? `<button class="nav-btn" onclick="goToPhase(5)" style="margin-top:12px;">Continuar →</button>` : `<button class="restart-btn" onclick="setupListening()" style="margin-top:12px;">🔄 Repetir la sección</button>`}
+    </div>`;
+    return;
+  }
+  const round = listenRounds[listenIndex];
+  document.getElementById('listenCount').textContent = `Round ${listenIndex+1} of ${listenRounds.length}`;
+  document.getElementById('bigSpeakBtn').style.display = 'inline-flex'; document.getElementById('bigSpeakBtn').classList.add('pulsing');
+  const contextEl = document.getElementById('listenContext'); contextEl.style.display = 'block'; contextEl.innerHTML = `<strong>${round.context}</strong>`;
+  const questionEl = document.getElementById('listenQuestion'); questionEl.style.display = 'block'; questionEl.innerHTML = `<span class="q-tag">❓ Question</span>${round.question}`;
+  listenAnswered = false; const letters = ['A','B','C','D']; const optWrap = document.getElementById('listenOptions');
+  optWrap.innerHTML = round.options.map((opt, i) => `<div class="listen-opt" data-i="${i}"><span class="lo-letter">${letters[i]}</span><span>${opt}</span></div>`).join('');
+  optWrap.querySelectorAll('.listen-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=>{
+      if(listenAnswered) return; listenAnswered = true;
+      const chosen = parseInt(opt.dataset.i); const isCorrect = chosen === round.answerIndex;
+      if(isCorrect){
+        opt.classList.add('correct'); listenCorrect++; document.getElementById('listenCorrect').textContent = listenCorrect; playDing();
+        document.getElementById('bigSpeakBtn').classList.remove('pulsing');
+        optWrap.querySelectorAll('.listen-opt').forEach(o=>o.style.pointerEvents='none');
+        setTimeout(()=>{ listenIndex++; loadListenRound(); }, 1400);
+      } else {
+        opt.classList.add('wrong'); listenWrong++; document.getElementById('listenWrong').textContent = listenWrong; playBuzz();
+        optWrap.querySelectorAll('.listen-opt').forEach(o=>{ if(parseInt(o.dataset.i) === round.answerIndex) o.classList.add('correct'); o.style.pointerEvents='none'; });
+        setTimeout(()=>{ listenIndex++; loadListenRound(); }, 2000);
+      }
+    });
+  });
+  document.getElementById('bigSpeakBtn').onclick = ()=> speak(round.audio); setTimeout(()=> speak(round.audio), 500);
+}
+
+// SECTION 5
+function setupFillBlank(){
+  fbIndex = 0; fbScore = 0; fbWrong = 0; fbOptionsCache = FILL_BLANK.map(q => shuffle(q.options)); loadFillBlank();
+}
+function loadFillBlank(){
+  const area = document.getElementById('fbArea'); document.getElementById('fbProgress').style.width = (fbIndex/FILL_BLANK.length*100)+'%';
+  if(fbIndex >= FILL_BLANK.length){
+    document.getElementById('fbProgress').style.width = '100%';
+    const totalAnswers = fbScore + fbWrong; const pct = totalAnswers > 0 ? Math.round((fbScore / totalAnswers) * 100) : 0; const passed = pct >= 80;
+    area.innerHTML = `<div class="fb-card" style="text-align:center;">
+      <div style="font-size:72px;">${passed ? '🥇' : '🔄'}</div>
+      <h3 style="color:${passed ? 'var(--green)' : 'var(--red)'};margin-top:0;">${passed ? '✅ ¡Sección completada!' : '❌ Necesitas 80% para pasar'}</h3>
+      <p style="color:var(--muted);">✅ Aciertos: ${fbScore} | ❌ Fallos: ${fbWrong} | 📊 ${pct}%</p>
+      ${passed ? `<button class="nav-btn" onclick="goToPhase(6)" style="margin-top:16px;">Continuar →</button>` : `<button class="restart-btn" onclick="setupFillBlank()" style="margin-top:16px;">🔄 Repetir la sección</button>`}
+    </div>`;
+    return;
+  }
+  const q = FILL_BLANK[fbIndex]; const opts = fbOptionsCache[fbIndex]; const tenseTag = q.tense ? `<span class="tense-tag">${q.tense}</span>` : '';
+  area.innerHTML = `
+    <div class="fb-card">
+      <div class="fb-top">
+        <div class="fb-num">QUESTION ${fbIndex+1} / ${FILL_BLANK.length}</div>
+        <div class="fb-score">✅ ${fbScore} | ❌ ${fbWrong}</div>
+      </div>
+      <div class="fb-sentence">
+        ${q.prefix} <span class="gap">${q.gap}</span> ${q.suffix} ${tenseTag}
+      </div>
+      <div class="fb-choices" id="fbChoices">
+        ${opts.map(op => `<div class="fb-choice" data-val="${op}">${op}</div>`).join('')}
+      </div>
+      <div class="fb-feedback" id="fbFeedback"></div>
+    </div>`;
+  const choices = document.querySelectorAll('#fbChoices .fb-choice'); let solved = false;
+  choices.forEach(c=>{
+    c.addEventListener('click', ()=>{
+      if(solved) return; const val = c.dataset.val; const feedback = document.getElementById('fbFeedback');
+      if(val === q.answer){
+        solved = true; c.classList.add('correct'); choices.forEach(cc=>{ cc.style.pointerEvents = 'none'; }); fbScore++;
+        feedback.textContent = '✅ Correct!'; feedback.className = 'fb-feedback ok'; playDing();
+        setTimeout(()=>{ fbIndex++; loadFillBlank(); }, 1200);
+      } else {
+        c.classList.add('wrong'); fbWrong++; feedback.textContent = '❌ Incorrect.'; feedback.className = 'fb-feedback bad'; playBuzz();
+        setTimeout(()=>{ c.classList.remove('wrong'); }, 500);
+      }
+    });
+  });
+}
+
+// SECTION 6
+function setupSpeech(){ spIndex = 0; spScore = 0; spWrong = 0; loadSpeechItem(); }
+function loadSpeechItem(){
+  const area = document.getElementById('spArea');
+  if(spIndex >= SPEECH_PRACTICE.length){
+    const totalAnswers = spScore + spWrong; const pct = totalAnswers > 0 ? Math.round((spScore / totalAnswers) * 100) : 0; const passed = pct >= 80;
+    area.innerHTML = `<div class="sp-card">
+      <div style="font-size:72px;">${passed ? '🥇' : '🔄'}</div>
+      <h3 style="color:${passed ? 'var(--green)' : 'var(--red)'};margin-top:0;">${passed ? '✅ ¡Sección completada!' : '❌ Necesitas 80% para pasar'}</h3>
+      <p style="color:var(--muted);">✅ Aciertos: ${spScore} | ❌ Fallos: ${spWrong} | 📊 ${pct}%</p>
+      ${passed ? `<button class="nav-btn" onclick="goToPhase(7)" style="margin-top:16px;">Continuar a Reading →</button>` : `<button class="restart-btn" onclick="setupSpeech()" style="margin-top:16px;">🔄 Repetir la sección</button>`}
+    </div>`;
+    return;
+  }
+  const target = SPEECH_PRACTICE[spIndex];
+  area.innerHTML = `
+    <div class="sp-card">
+      <div class="sp-top">
+        <div class="sp-num">PHRASE ${spIndex+1} / ${SPEECH_PRACTICE.length}</div>
+        <div class="sp-score">✅ ${spScore} | ❌ ${spWrong}</div>
+      </div>
+      <button class="speak-btn big" id="spListenBtn" style="margin:0 auto;">🔊</button>
+      <div class="sp-target">${target}</div>
+      <div class="sp-hint">Presioná el micrófono y hablá claro. Se evalúa palabra por palabra.</div>
+      <div class="sp-controls"><button class="mic-btn" id="micBtn">🎙️</button></div>
+      <div class="sp-transcript" id="spTranscript">&nbsp;</div>
+      <div class="sp-feedback" id="spFeedback">&nbsp;</div>
+      <button class="sp-next" id="spNextBtn">Next →</button>
+      <div id="spUnsupported"></div>
+    </div>`;
+  document.getElementById('spListenBtn').addEventListener('click', ()=> speak(target));
+  if(!SpeechRecognitionAPI){
+    document.getElementById('spUnsupported').innerHTML = `<div class="sp-unsupported">🎙️ Speech recognition not supported. Try Google Chrome.</div>`;
+    document.getElementById('micBtn').disabled = true; document.getElementById('spNextBtn').classList.add('show');
+    document.getElementById('spNextBtn').onclick = ()=>{ spIndex++; loadSpeechItem(); };
+    return;
+  }
+  const micBtn = document.getElementById('micBtn');
+  micBtn.addEventListener('click', ()=>{ if(recognizing) return; requestSpMic(target); });
+}
+function requestSpMic(target){
+  const box = document.getElementById('spUnsupported'); if(box) box.innerHTML = '';
+  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{ stream.getTracks().forEach(t=>t.stop()); startSpRecognition(target); })
+      .catch(()=>{ if(box) box.innerHTML = `<div class="sp-unsupported">🎙️ Microphone access blocked.</div>`; });
+  } else { startSpRecognition(target); }
+}
+function startSpRecognition(target){
+  const micBtn = document.getElementById('micBtn');
+  const transcriptEl = document.getElementById('spTranscript');
+  const feedbackEl = document.getElementById('spFeedback');
+  const rec = new SpeechRecognitionAPI();
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 4;
+  recognizing = true; micBtn.classList.add('listening'); transcriptEl.textContent = 'Listening...'; feedbackEl.textContent = ''; feedbackEl.className = 'sp-feedback';
+  rec.onresult = (event)=>{
+    let bestHeard = event.results[0][0].transcript;
+    let bestScore = matchScore(target, bestHeard);
+    for(let i=1;i<event.results[0].length;i++){ const alt = event.results[0][i].transcript; const s = matchScore(target, alt); if(s > bestScore){ bestScore = s; bestHeard = alt; } }
+    transcriptEl.textContent = `You said: "${bestHeard}"`;
+    if(bestScore >= 0.4){ spScore++; feedbackEl.textContent = '✅ Great! Clear pronunciation.'; feedbackEl.className = 'sp-feedback ok'; playDing(); }
+    else if(bestScore >= 0.25){ spScore++; feedbackEl.textContent = '👍 Almost! Good attempt, keep practicing.'; feedbackEl.className = 'sp-feedback ok'; playDing(); }
+    else { spWrong++; feedbackEl.textContent = '❌ Try again. Speak slowly and clearly.'; feedbackEl.className = 'sp-feedback bad'; playBuzz(); }
+    document.getElementById('spNextBtn').classList.add('show'); document.getElementById('spNextBtn').onclick = ()=>{ spIndex++; loadSpeechItem(); };
+  };
+  rec.onerror = ()=>{ recognizing = false; micBtn.classList.remove('listening'); };
+  rec.onend = ()=>{ recognizing = false; micBtn.classList.remove('listening'); };
+  rec.start();
+}
+
+// SECTION 7
+function setupReading(){ readIndex = 0; readCorrect = 0; readWrong = 0; readAnswered = false; renderReadingQuestion(); }
+function renderReadingQuestion(){
+  const panel = document.getElementById('readPanel');
+  if(readIndex >= READING_QUESTIONS.length){
+    const totalAnswers = readCorrect + readWrong; const pct = totalAnswers > 0 ? Math.round((readCorrect / totalAnswers) * 100) : 0; const passed = pct >= 80;
+    panel.innerHTML = `
+      <div class="lc-complete ${passed ? 'pass' : 'fail'}">
+        <div style="font-size:72px;">${passed ? '🥇' : '🔄'}</div>
+        <h3>${passed ? '✅ ¡Reading completado!' : '❌ Necesitas 80% para pasar'}</h3>
+        <div class="score-big">${pct}%</div>
+        <div class="score-sub">✅ Aciertos: ${readCorrect} &nbsp;|&nbsp; ❌ Fallos: ${readWrong}</div>
+        ${passed ? `<button class="nav-btn" onclick="goToPhase(8)" style="margin-top:16px;">Ver Nota Final →</button>` : `<button class="restart-btn" onclick="setupReading()" style="margin-top:16px;">🔄 Repetir la sección</button>`}
+      </div>`;
+    return;
+  }
+  const totalAnswers = readCorrect + readWrong; const currentPct = totalAnswers > 0 ? Math.round((readCorrect / totalAnswers) * 100) : 100; const q = READING_QUESTIONS[readIndex];
+  panel.innerHTML = `
+    <div class="read-score-bar">
+      <span>READING · Pregunta ${readIndex+1} / ${READING_QUESTIONS.length}</span>
+      <span><span class="good">✅ ${readCorrect}</span> &nbsp; <span class="bad">❌ ${readWrong}</span> &nbsp; 📊 ${currentPct}%</span>
+    </div>
+    <div class="read-passage">${READING_PASSAGE}</div>
+    <div class="read-q">
+      <div class="read-q-text">${readIndex+1}. ${q.q}</div>
+      <div class="read-opts" id="readOpts">
+        ${q.options.map((opt, i) => `<div class="read-opt" data-i="${i}">${opt}</div>`).join('')}
+      </div>
+    </div>
+    <div id="readFeedback" style="font-weight:800;font-size:14px;min-height:22px;text-align:center;"></div>`;
+  readAnswered = false; const opts = document.querySelectorAll('#readOpts .read-opt');
+  opts.forEach(opt => {
+    opt.addEventListener('click', () => {
+      if(readAnswered) return; readAnswered = true; const chosen = parseInt(opt.dataset.i); const feedback = document.getElementById('readFeedback');
+      if(chosen === q.answer){
+        opt.classList.add('correct'); readCorrect++; feedback.textContent = '✅ Correct!'; feedback.style.color = 'var(--green)'; playDing();
+        opts.forEach(o => o.classList.add('disabled')); setTimeout(()=>{ readIndex++; renderReadingQuestion(); }, 1300);
+      } else {
+        opt.classList.add('wrong'); readWrong++; feedback.textContent = '❌ Incorrect. The correct answer was: ' + q.options[q.answer]; feedback.style.color = 'var(--red)'; playBuzz();
+        opts.forEach(o => { o.classList.add('disabled'); if(parseInt(o.dataset.i) === q.answer) o.classList.add('correct'); });
+        setTimeout(()=>{ readIndex++; renderReadingQuestion(); }, 2000);
+      }
+    });
+  });
+}
+
+// SECTION 8
+function renderFinalNote(){
+  let coreCorrect = 0, coreWrong = 0;
+  CORE_WORDS.forEach((item, i)=>{
+    const status = wordStatus[item.word] || { correct:0, wrong:0 };
+    if(wordsDone[i]){ coreCorrect += status.correct || 0; coreWrong += status.wrong || 0; }
+  });
+  const sectionData = [
+    { label:'Core Words', val:coreCorrect, wrong:coreWrong, max:CORE_WORDS.length },
+    { label:'Match the Pair', val:matchCorrect, wrong:matchWrong, max:MATCH_PAIRS.length },
+    { label:'Listen & Click', val:lcCorrect, wrong:lcWrong, max:LC_ROUNDS.length },
+    { label:'Listen & Answer', val:listenCorrect, wrong:listenWrong, max:LISTEN_POOL.length },
+    { label:'Fill the Blank', val:fbScore, wrong:fbWrong, max:FILL_BLANK.length },
+    { label:'Speech Practice', val:spScore, wrong:spWrong, max:SPEECH_PRACTICE.length },
+    { label:'Reading', val:readCorrect, wrong:readWrong, max:READING_QUESTIONS.length }
+  ];
+  let totalCorrect = 0; let totalWrong = 0;
+  sectionData.forEach(s => { totalCorrect += s.val; totalWrong += s.wrong; });
+  const total = totalCorrect + totalWrong; const finalPct = total > 0 ? Math.round((totalCorrect/total)*100) : 0;
+  let finalNote = '1.0'; let message = ''; let messageClass = '';
+  if(finalPct >= 90){ finalNote = '7.0'; message = '🏆 ¡Excelente! Dominaste el contenido de Flight 10.'; messageClass = 'pass'; }
+  else if(finalPct >= 80){ finalNote = '6.0'; message = '⭐ ¡Muy bien! Aprobaste el Flight 10.'; messageClass = 'pass'; }
+  else if(finalPct >= 70){ finalNote = '5.0'; message = '👍 Aprobaste. Sigue practicando para mejorar.'; messageClass = 'pass'; }
+  else if(finalPct >= 60){ finalNote = '4.0'; message = '⚠️ Aprobaste con lo justo. Repasa el vocabulario.'; messageClass = ''; }
+  else { finalNote = '1.0 - 3.9'; message = '🔴 No aprobaste. Necesitas mínimo 80%. Repite el Flight 10.'; messageClass = 'fail'; }
+  const passedOverall = finalPct >= 80;
+  let failedWordsList = [];
+  CORE_WORDS.forEach((item, i)=>{
+    const status = wordStatus[item.word] || { correct:0, wrong:0 };
+    if(wordsDone[i] && status.wrong > 0){ failedWordsList.push({ word: item.word, context: item.sentence, wrong: status.wrong }); }
+  });
+  let failedHTML = '';
+  if(failedWordsList.length > 0){
+    failedHTML = `
+      <div class="failed-words">
+        <h4>🔴 Palabras que fallaste (${failedWordsList.length})</h4>
+        ${failedWordsList.map(fw => `<div class="fw-item"><span class="fw-word">${fw.word}</span><span class="fw-context">${fw.context}</span><span style="color:var(--red);font-weight:700;">❌ ${fw.wrong}</span></div>`).join('')}
+        <button class="restart-btn secondary" id="retryFailedBtn" style="margin-top:12px;">🔄 Repasar solo fallos</button>
+      </div>`;
+  }
+  document.getElementById('finalArea').innerHTML = `
+    <div class="final-card">
+      <h3>Flight 10 — Nota Final</h3>
+      <div class="final-score-big" style="color:${passedOverall ? 'var(--green)' : 'var(--red)'};">${finalPct}%</div>
+      <div class="final-score-sub">✅ ${totalCorrect} aciertos · ❌ ${totalWrong} fallos</div>
+      <div style="font-size:36px;font-weight:900;color:var(--amber);margin:16px 0;">NOTA: ${finalNote}</div>
+      <div class="final-message ${messageClass}">${message}</div>
+      <div class="final-breakdown">
+        ${sectionData.map(r => { const pct = r.max > 0 ? Math.round((r.val / r.max) * 100) : 0;
+          return `<div class="fb-row"><div class="fb-label">${r.label}</div><div class="fb-bar-outer"><div class="fb-bar-inner" style="width:${pct}%;"></div></div><div class="fb-val">${r.val}/${r.max}</div></div>`;
+        }).join('')}
+      </div>
+      ${failedHTML}
+      <button class="restart-btn" id="restartAllBtn">✈️ Repetir Flight 10</button>
+    </div>`;
+  document.getElementById('restartAllBtn').addEventListener('click', resetAll);
+  const retryBtn = document.getElementById('retryFailedBtn');
+  if(retryBtn){ retryBtn.addEventListener('click', retryFailedWords); }
+}
+function resetAll(){
+  wordIndex = 0; stepIndex = 1; wordsDone = new Array(CORE_WORDS.length).fill(false); wordStatus = {};
+  matchIndex = 0; matchCorrect = 0; matchWrong = 0; matchPairs = shuffle(MATCH_PAIRS.map(p => ({...p, matched: false})));
+  lcIndex = 0; lcCorrect = 0; lcWrong = 0; lcRounds = shuffle(LC_ROUNDS);
+  listenIndex = 0; listenCorrect = 0; listenWrong = 0; listenRounds = shuffle(LISTEN_POOL);
+  fbIndex = 0; fbScore = 0; fbWrong = 0;
+  spIndex = 0; spScore = 0; spWrong = 0;
+  readIndex = 0; readCorrect = 0; readWrong = 0;
+  renderStepper(); setupMatch(); setupListenClick(); setupListening(); setupFillBlank(); setupSpeech(); setupReading(); goToPhase(1);
+}
+function retryFailedWords(){
+  const failed = [];
+  CORE_WORDS.forEach((item, i)=>{
+    const status = wordStatus[item.word] || { correct:0, wrong:0 };
+    if(wordsDone[i] && status.wrong > 0){ failed.push(i); }
+  });
+  if(failed.length === 0){ alert('🎉 No tienes palabras falladas. ¡Excelente!'); return; }
+  wordsDone = wordsDone.map((done, i) => { if(failed.includes(i)){ wordStatus[CORE_WORDS[i].word] = { correct:0, wrong:0 }; return false; } return done; });
+  wordIndex = failed[0] || 0; stepIndex = 1; renderStepper(); goToPhase(1);
+}
+
+// INIT handled by loadRole
+setTimeout(()=>{ if('speechSynthesis' in window) window.speechSynthesis.getVoices(); }, 500);
+</script>
+</body>
+</html>
